@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fluffy Trees · Rust + WebGPU</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='13' r='10' fill='%239ecb63'/%3E%3Crect x='14' y='18' width='4' height='11' rx='1' fill='%236b4a2b'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --ink: #eaf4e4;
+    --muted: #a9c2a5;
+    --glass: rgba(10, 22, 14, 0.58);
+    --line: rgba(196, 235, 175, 0.18);
+    --accent: #bfe36b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8fb6d8; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  #gfx {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    cursor: grab;
+    touch-action: none;
+  }
+  #gfx:active { cursor: grabbing; }
+
+  .ui { position: fixed; inset: 0; pointer-events: none; }
+  .ui > * { pointer-events: auto; }
+
+  .brand {
+    position: absolute;
+    top: 18px;
+    left: 20px;
+    pointer-events: none !important;
+  }
+  .brand h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 14px rgba(0, 0, 0, 0.45);
+  }
+  .brand p {
+    margin: 3px 0 0;
+    font-size: 11.5px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55);
+  }
+
+  #stats {
+    position: absolute;
+    top: 18px;
+    right: 20px;
+    margin: 0;
+    padding: 13px 16px;
+    min-width: 232px;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    backdrop-filter: blur(14px) saturate(1.2);
+    font: 500 11.5px/1.65 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--ink);
+    white-space: pre;
+    text-align: right;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  }
+  #stats em { color: var(--accent); font-style: normal; }
+
+  .panel {
+    position: absolute;
+    left: 20px;
+    bottom: 20px;
+    width: 300px;
+    padding: 16px 17px 15px;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    backdrop-filter: blur(16px) saturate(1.2);
+    box-shadow: 0 16px 50px rgba(0, 0, 0, 0.28);
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+  .panel h2 {
+    margin: 0 0 11px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .row { margin: 11px 0 0; }
+  .row:first-of-type { margin-top: 0; }
+  .row .label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  .row .label output {
+    font: 600 11.5px ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--accent);
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 20px;
+    background: transparent;
+    cursor: pointer;
+    margin: 0;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(234, 244, 228, 0.22);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5.5px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid rgba(10, 22, 14, 0.5);
+    box-shadow: 0 0 0 3px rgba(191, 227, 107, 0.12);
+  }
+  input[type="range"]::-moz-range-track {
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(234, 244, 228, 0.22);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 12px; border: none; border-radius: 50%;
+    background: var(--accent);
+  }
+  .buttons { display: flex; gap: 8px; margin-top: 15px; }
+  button {
+    flex: 1;
+    appearance: none;
+    border: 1px solid var(--line);
+    background: rgba(234, 244, 228, 0.08);
+    color: var(--ink);
+    font: 600 11.5px/1 ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.02em;
+    padding: 9px 10px;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  button:hover { background: rgba(234, 244, 228, 0.16); border-color: rgba(196, 235, 175, 0.35); }
+  button:active { transform: translateY(1px); }
+
+  .note {
+    margin-top: 13px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    font-size: 10.5px;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+
+  #hint {
+    position: absolute;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: rgba(234, 244, 228, 0.72);
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
+    pointer-events: none !important;
+    white-space: nowrap;
+  }
+
+  #loading {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 50% 40%, #22331f, #0b120c 70%);
+    z-index: 10;
+    transition: opacity 0.5s ease;
+    text-align: center;
+  }
+  #loading.gone { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 30px; height: 30px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(191, 227, 107, 0.2);
+    border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #status { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  #status.error { color: #ffb3a0; white-space: pre-wrap; max-width: 560px; }
+
+  @media (max-width: 720px) {
+    .panel { width: calc(100vw - 40px); }
+    #stats { display: none; }
+    #hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="gfx"></canvas>
+
+<div class="ui">
+  <div class="brand">
+    <h1>Fluffy Trees</h1>
+    <p>Rust · WebGPU · quad mesh → billboards</p>
+  </div>
+
+  <pre id="stats">warming up…</pre>
+
+  <div class="panel">
+    <h2>Forest &amp; drive</h2>
+
+    <div class="row">
+      <div class="label"><span>Trees</span><output id="v-trees">1,800</output></div>
+      <input id="trees" type="range" min="200" max="15000" step="100" value="1800" />
+    </div>
+
+    <div class="row">
+      <div class="label"><span>Speed</span><output id="v-speed">90 km/h</output></div>
+      <input id="speed" type="range" min="0" max="300" step="5" value="90" />
+    </div>
+
+    <div class="row">
+      <div class="label"><span>Wind</span><output id="v-wind">60%</output></div>
+      <input id="wind" type="range" min="0" max="150" step="5" value="60" />
+    </div>
+
+    <div class="row">
+      <div class="label"><span>Shading · painterly → toon</span><output id="v-style">35%</output></div>
+      <input id="style" type="range" min="0" max="100" step="5" value="35" />
+    </div>
+
+    <div class="row">
+      <div class="label"><span>Billboard blend</span><output id="v-billboard">100%</output></div>
+      <input id="billboard" type="range" min="0" max="100" step="5" value="100" />
+    </div>
+
+    <div class="buttons">
+      <button id="pause">Pause</button>
+      <button id="reset">Reset view</button>
+    </div>
+
+    <div class="note">
+      <b>Scaling test:</b> each tree is one instanced slim trunk + 22 tiered
+      foliage pads. All foliage is a single instanced draw with GPU position
+      wrapping and alpha-to-coverage — no CPU sorting per frame.
+    </div>
+  </div>
+
+  <div id="hint">drag to look · space to pause</div>
+</div>
+
+<div id="loading">
+  <div>
+    <div class="spinner"></div>
+    <div id="status">Booting Rust / WebGPU…</div>
+  </div>
+</div>
+
+<script type="module">
+  import init, {
+    run,
+    look,
+    set_tree_count,
+    set_speed,
+    set_wind,
+    toggle_pause,
+    reset_view,
+    set_style,
+    set_billboard,
+  } from "./pkg/fluffy_trees.js";
+
+  async function boot() {
+  const canvas = document.getElementById("gfx");
+  const loading = document.getElementById("loading");
+  const status = document.getElementById("status");
+
+  try {
+    if (!navigator.gpu) {
+      throw new Error(
+        "WebGPU is not available in this browser. Chrome 113+ or a recent Chrome with WebGPU enabled is required."
+      );
+    }
+    await init();
+    await run();
+    loading.classList.add("gone");
+    setTimeout(() => loading.remove(), 600);
+  } catch (err) {
+    status.classList.add("error");
+    status.textContent =
+      "Failed to start the WebGPU renderer.\n\n" + (err?.message ?? String(err));
+    return;
+  }
+
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  canvas.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  });
+
+  canvas.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    look(dx, dy);
+  });
+
+  canvas.addEventListener("pointerup", (e) => {
+    dragging = false;
+    canvas.releasePointerCapture(e.pointerId);
+  });
+
+  const trees = document.getElementById("trees");
+  const treesOut = document.getElementById("v-trees");
+  trees.addEventListener("input", () => {
+    treesOut.textContent = Number(trees.value).toLocaleString();
+  });
+  trees.addEventListener("change", () => set_tree_count(Number(trees.value)));
+
+  const speed = document.getElementById("speed");
+  const speedOut = document.getElementById("v-speed");
+  speed.addEventListener("input", () => {
+    speedOut.textContent = `${speed.value} km/h`;
+    set_speed(Number(speed.value));
+  });
+
+  const wind = document.getElementById("wind");
+  const windOut = document.getElementById("v-wind");
+  wind.addEventListener("input", () => {
+    windOut.textContent = `${wind.value}%`;
+    set_wind(Number(wind.value) / 100);
+  });
+
+  const style = document.getElementById("style");
+  const styleOut = document.getElementById("v-style");
+  style.addEventListener("input", () => {
+    styleOut.textContent = `${style.value}%`;
+    set_style(Number(style.value) / 100);
+  });
+
+  const billboard = document.getElementById("billboard");
+  const billboardOut = document.getElementById("v-billboard");
+  billboard.addEventListener("input", () => {
+    billboardOut.textContent = `${billboard.value}%`;
+    set_billboard(Number(billboard.value) / 100);
+  });
+
+  const pauseBtn = document.getElementById("pause");
+  function updatePause() {
+    pauseBtn.textContent = toggle_pause() ? "Drive" : "Pause";
+  }
+  pauseBtn.addEventListener("click", updatePause);
+
+  document.getElementById("reset").addEventListener("click", reset_view);
+
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space" && e.target === document.body) {
+      e.preventDefault();
+      pauseBtn.textContent = toggle_pause() ? "Drive" : "Pause";
+    }
+  });
+
+  set_speed(90);
+  set_wind(0.6);
+  set_style(0.35);
+  set_billboard(1.0);
+  }
+
+  boot();
+</script>
+</body>
+</html>
