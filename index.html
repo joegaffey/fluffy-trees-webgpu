@@ -80,23 +80,44 @@
     left: 20px;
     bottom: 20px;
     width: 300px;
-    padding: 16px 17px 15px;
+    padding: 0;
     background: var(--glass);
     border: 1px solid var(--line);
     border-radius: 16px;
     backdrop-filter: blur(16px) saturate(1.2);
     box-shadow: 0 16px 50px rgba(0, 0, 0, 0.28);
     max-height: calc(100vh - 40px);
-    overflow-y: auto;
+    overflow: hidden;
   }
-  .panel h2 {
-    margin: 0 0 11px;
-    font-size: 10.5px;
-    font-weight: 600;
+  .panel-toggle {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 15px 17px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    color: var(--muted);
+    font: 600 10.5px/1 ui-sans-serif, system-ui, sans-serif;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--muted);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease;
   }
+  .panel-toggle:hover { background: rgba(234, 244, 228, 0.06); border-color: transparent; }
+  .panel-toggle:active { transform: none; }
+  .panel-toggle .chevron { transition: transform 0.2s ease; flex: none; }
+  .panel.collapsed .panel-toggle .chevron { transform: rotate(-90deg); }
+  .panel-body {
+    padding: 0 17px 15px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+  }
+  .panel.collapsed .panel-body { display: none; }
   .row { margin: 11px 0 0; }
   .row:first-of-type { margin-top: 0; }
   .row .label {
@@ -226,43 +247,50 @@
 
   <pre id="stats">warming up…</pre>
 
-  <div class="panel">
-    <h2>Forest &amp; drive</h2>
+  <div class="panel collapsed" id="panel">
+    <button class="panel-toggle" id="panel-toggle" aria-expanded="false" aria-controls="panel-body">
+      <span>Forest &amp; drive</span>
+      <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <path d="M2 4.5 6 8l4-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </button>
 
-    <div class="row">
-      <div class="label"><span>Trees</span><output id="v-trees">1,800</output></div>
-      <input id="trees" type="range" min="200" max="15000" step="100" value="1800" />
-    </div>
+    <div class="panel-body" id="panel-body">
+      <div class="row">
+        <div class="label"><span>Trees</span><output id="v-trees">1,800</output></div>
+        <input id="trees" type="range" min="200" max="15000" step="100" value="1800" />
+      </div>
 
-    <div class="row">
-      <div class="label"><span>Speed</span><output id="v-speed">90 km/h</output></div>
-      <input id="speed" type="range" min="0" max="300" step="5" value="90" />
-    </div>
+      <div class="row">
+        <div class="label"><span>Speed</span><output id="v-speed">90 km/h</output></div>
+        <input id="speed" type="range" min="0" max="300" step="5" value="90" />
+      </div>
 
-    <div class="row">
-      <div class="label"><span>Wind</span><output id="v-wind">60%</output></div>
-      <input id="wind" type="range" min="0" max="150" step="5" value="60" />
-    </div>
+      <div class="row">
+        <div class="label"><span>Wind</span><output id="v-wind">60%</output></div>
+        <input id="wind" type="range" min="0" max="150" step="5" value="60" />
+      </div>
 
-    <div class="row">
-      <div class="label"><span>Shading · painterly → toon</span><output id="v-style">35%</output></div>
-      <input id="style" type="range" min="0" max="100" step="5" value="35" />
-    </div>
+      <div class="row">
+        <div class="label"><span>Shading · painterly → toon</span><output id="v-style">35%</output></div>
+        <input id="style" type="range" min="0" max="100" step="5" value="35" />
+      </div>
 
-    <div class="row">
-      <div class="label"><span>Billboard blend</span><output id="v-billboard">100%</output></div>
-      <input id="billboard" type="range" min="0" max="100" step="5" value="100" />
-    </div>
+      <div class="row">
+        <div class="label"><span>Billboard blend</span><output id="v-billboard">100%</output></div>
+        <input id="billboard" type="range" min="0" max="100" step="5" value="100" />
+      </div>
 
-    <div class="buttons">
-      <button id="pause">Pause</button>
-      <button id="reset">Reset view</button>
-    </div>
+      <div class="buttons">
+        <button id="pause">Pause</button>
+        <button id="reset">Reset view</button>
+      </div>
 
-    <div class="note">
-      <b>Scaling test:</b> each tree is one instanced slim trunk + 22 tiered
-      foliage pads. All foliage is a single instanced draw with GPU position
-      wrapping and alpha-to-coverage — no CPU sorting per frame.
+      <div class="note">
+        <b>Scaling test:</b> each tree is one instanced slim trunk + 22 tiered
+        foliage pads. All foliage is a single instanced draw with GPU position
+        wrapping and alpha-to-coverage — no CPU sorting per frame.
+      </div>
     </div>
   </div>
 
@@ -336,8 +364,14 @@
     canvas.releasePointerCapture(e.pointerId);
   });
 
-  const trees = document.getElementById("trees");
-  const treesOut = document.getElementById("v-trees");
+  const panel = document.getElementById("panel");
+  const panelToggle = document.getElementById("panel-toggle");
+  panelToggle.addEventListener("click", () => {
+    const collapsed = panel.classList.toggle("collapsed");
+    panelToggle.setAttribute("aria-expanded", String(!collapsed));
+  });
+
+  const trees = document.getElementById("trees");  const treesOut = document.getElementById("v-trees");
   trees.addEventListener("input", () => {
     treesOut.textContent = Number(trees.value).toLocaleString();
   });
